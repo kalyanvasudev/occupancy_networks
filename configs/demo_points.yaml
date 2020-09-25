@@ -1,0 +1,14 @@
+inherit_from: configs/unconditional/onet_airplanes_pretrained.yaml
+
+#data:
+#  mesh_gt_root: /private/home/kalyanv/learning_vision3d/datasets/ShapeNetCore.v1
+
+training:
+  out_dir:  demo_points
+generation:
+  vis_n_outputs: 5
+  generation_dir: generation
+  refinement_step: 0
+  simplify_nfaces: 5000
+  generate_mesh: true
+  generate_pointcloud: false

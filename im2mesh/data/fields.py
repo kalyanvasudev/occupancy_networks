@@ -130,11 +130,12 @@ class PointsField(Field):
             provided
 
     '''
-    def __init__(self, file_name, transform=None, with_transforms=False, unpackbits=False):
+    def __init__(self, file_name, transform=None, with_transforms=False, unpackbits=False, save_all_points=True):
         self.file_name = file_name
         self.transform = transform
         self.with_transforms = with_transforms
         self.unpackbits = unpackbits
+        self.save_all_points = save_all_points # needed to save copy of all points
 
     def load(self, model_path, idx, category):
         ''' Loads the data point.
@@ -164,6 +165,9 @@ class PointsField(Field):
             None: points,
             'occ': occupancies,
         }
+        if self.save_all_points:
+            data['all_points'] = points
+            data['all_occ'] = occupancies
 
         if self.with_transforms:
             data['loc'] = points_dict['loc'].astype(np.float32)

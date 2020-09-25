@@ -8,6 +8,7 @@ from im2mesh.utils import libmcubes
 from im2mesh.common import make_3d_grid
 from im2mesh.utils.libsimplify import simplify_mesh
 from im2mesh.utils.libmise import MISE
+from torch.nn import functional as F
 import time
 
 
@@ -49,6 +50,143 @@ class Generator3D(object):
         self.sample = sample
         self.simplify_nfaces = simplify_nfaces
         self.preprocessor = preprocessor
+
+
+    def generate_mesh_from_points(self, data, return_stats=True):
+        ''' Generates the output from points and occupancies.
+
+        Args:
+            data (tensor): data tensor
+            return_stats (bool): whether stats should be returned
+        '''
+        self.model.eval()
+        device = self.device
+        stats_dict = {}
+
+        inputs = torch.empty(1, 0).to(device)
+        kwargs = {}
+
+        # Preprocess if requires
+        if self.preprocessor is not None:
+            t0 = time.time()
+            with torch.no_grad():
+                inputs = self.preprocessor(inputs)
+            stats_dict['time (preprocess)'] = time.time() - t0
+
+        # Encode inputs
+        t0 = time.time()
+        with torch.no_grad():
+            c = self.model.encode_inputs(inputs)
+        stats_dict['time (encode inputs)'] = time.time() - t0
+
+        kwargs = {}
+        z = self.model.infer_z(data['points'].to(device),data['points.occ'].to(device), c, **kwargs)
+        z = z_gt.loc.detach()
+        
+        mesh = self.generate_from_latent(z, c, stats_dict=stats_dict, **kwargs)
+
+        if return_stats:
+            return mesh, stats_dict
+        else:
+            return mesh
+
+    def optimize_z(self, z_gt, c, data, opt_batch_size=2048,
+                                        opt_iters=10000,
+                                        z_type='random'): 
+        device = self.device
+        all_points = data['points.all_points'] 
+        all_occ = data['points.all_occ']
+        
+        # optimize for z
+
+        # sample from a N(0,1)
+        #z = self.model.get_z_from_prior((1,), sample=self.sample).to(device)
+        #z = z.float().to(device).requires_grad_(True)
+        
+        # sample from uniform in a range
+        z = torch.empty(z_gt.shape)
+        torch.nn.init.uniform_(z,-0.1,0.1)
+        z= z.float().to(device).requires_grad_(True)
+        
+        # sample completely random
+        #z = torch.rand(z_gt.shape).float().to(device).requires_grad_(True)
+        
+        #optimizer = torch.optim.Adam([z], lr=0.001 )#,weight_decay=0.0001)
+        optimizer = torch.optim.SGD([z], lr=0.0001, momentum=0.9 )#,weight_decay=0.0001)
+
+        for i in range(opt_iters):
+            optimizer.zero_grad()
+            idx = np.random.randint(all_points.shape[1], size= opt_batch_size)
+            points = all_points[:, idx,:].to(device)
+            occ = all_occ[:, idx].to(device)
+            
+            kwargs = {}
+            logits = self.model.decode(points, z, c, **kwargs).logits
+            loss_i = F.binary_cross_entropy_with_logits(
+                logits, occ, reduction='none')
+            loss = loss_i.sum(-1).mean() #+ z.abs().mean()
+            if not i %500 or i ==0: 
+                print("Opt Iter: {:4d}, Loss: {:0.3f}, Z Dist: {:0.3f}, Z_gt Norm: {:0.3f}, Z_cur Norm: {:0.3f}".format( 
+                    i, loss.tolist(), torch.norm(z_gt-z).tolist(), torch.norm(z_gt).tolist(), torch.norm(z).tolist()))
+                #print('opt iter:', i, "Loss:", loss.tolist(), "Z dist: ", torch.norm(z_gt-z).tolist(), \
+                #'Z_gt norm:', torch.norm(z_gt).tolist(), 'Z_cur norm:', torch.norm(z).tolist())
+            loss.backward()
+            optimizer.step()
+
+        return z.detach(), loss.tolist()
+
+
+    def generate_mesh_from_points_optimize(self, data, 
+                                        return_stats=True, 
+                                        opt_batch_size=2048,
+                                        opt_iters=10000,
+                                        rnd_restart_num=1,
+                                        z_type='random'): # avail options 'random' and 'dist'
+        ''' Only batch size 1 supported!!!.
+
+        Args:
+            data (tensor): data tensor
+            return_stats (bool): whether stats should be returned
+        '''
+        self.model.eval()
+        device = self.device
+        stats_dict = {}
+
+        inputs = torch.empty(1, 0).to(device)
+        kwargs = {}
+
+        # Preprocess if requires
+        if self.preprocessor is not None:
+            t0 = time.time()
+            with torch.no_grad():
+                inputs = self.preprocessor(inputs)
+            stats_dict['time (preprocess)'] = time.time() - t0
+
+        # Encode inputs
+        t0 = time.time()
+        with torch.no_grad():
+            c = self.model.encode_inputs(inputs)
+        stats_dict['time (encode inputs)'] = time.time() - t0
+
+        kwargs = {}
+        # ground truth z
+        z_gt = self.model.infer_z(data['points.all_points'].to(device),data['points.all_occ'].to(device), c, **kwargs)
+        z_gt = z_gt.loc.detach()
+
+        z, loss = None, np.float('inf')
+
+        for i in range(rnd_restart_num):
+            print(f"####### Rand restart number: {i}/{rnd_restart_num} ##########")
+            temp_z, temp_loss = self.optimize_z(z_gt, c, data, opt_batch_size,opt_iters, z_type)
+            if temp_loss < loss:
+                z = temp_z
+                loss = temp_loss
+
+        mesh = self.generate_from_latent(z, c, stats_dict=stats_dict, **kwargs)
+        if return_stats:
+            return mesh, stats_dict
+        else:
+            return mesh
 
     def generate_mesh(self, data, return_stats=True):
         ''' Generates the output mesh.
