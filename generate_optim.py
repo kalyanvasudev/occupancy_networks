@@ -76,7 +76,7 @@ mesh_gt_root = '/private/home/kalyanv/learning_vision3d/datasets/ShapeNetCore.v1
 model_counter = defaultdict(int)
 i = 0
 for it, data in enumerate(test_loader):
-    if i > vis_n_outputs:
+    if i >= vis_n_outputs:
         break
     i += 1
     

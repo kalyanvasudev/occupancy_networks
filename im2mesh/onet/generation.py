@@ -112,7 +112,7 @@ class Generator3D(object):
         #z = torch.rand(z_gt.shape).float().to(device).requires_grad_(True)
         
         #optimizer = torch.optim.Adam([z], lr=0.001 )#,weight_decay=0.0001)
-        optimizer = torch.optim.SGD([z], lr=0.0001, momentum=0.9 )#,weight_decay=0.0001)
+        optimizer = torch.optim.SGD([z], lr=0.001, momentum=0.9 )#,weight_decay=0.0001)
 
         for i in range(opt_iters):
             optimizer.zero_grad()
@@ -125,7 +125,7 @@ class Generator3D(object):
             loss_i = F.binary_cross_entropy_with_logits(
                 logits, occ, reduction='none')
             loss = loss_i.sum(-1).mean() #+ z.abs().mean()
-            if not i %500 or i ==0: 
+            if not i %200 or i ==0: 
                 print("Opt Iter: {:4d}, Loss: {:0.3f}, Z Dist: {:0.3f}, Z_gt Norm: {:0.3f}, Z_cur Norm: {:0.3f}".format( 
                     i, loss.tolist(), torch.norm(z_gt-z).tolist(), torch.norm(z_gt).tolist(), torch.norm(z).tolist()))
                 #print('opt iter:', i, "Loss:", loss.tolist(), "Z dist: ", torch.norm(z_gt-z).tolist(), \
@@ -139,7 +139,7 @@ class Generator3D(object):
     def generate_mesh_from_points_optimize(self, data, 
                                         return_stats=True, 
                                         opt_batch_size=2048,
-                                        opt_iters=10000,
+                                        opt_iters=2000,
                                         rnd_restart_num=1,
                                         z_type='random'): # avail options 'random' and 'dist'
         ''' Only batch size 1 supported!!!.
