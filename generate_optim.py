@@ -145,7 +145,8 @@ for it, data in enumerate(test_loader):
 
     if generate_mesh:
         t0 = time.time()
-        #out = generator.generate_mesh_from_points(data)
+        
+        
         out = generator.generate_mesh_from_points_optimize(data)
         time_dict['mesh'] = time.time() - t0
 
@@ -160,6 +161,21 @@ for it, data in enumerate(test_loader):
         mesh_out_file = os.path.join(mesh_dir, '%s.off' % modelname)
         mesh.export(mesh_out_file)
         out_file_dict['mesh'] = mesh_out_file
+
+        ###### Add ground truth mesh from latent
+        #out_gt = generator.generate_mesh_from_points(data)
+
+        # Get statistics
+        #try:
+        #    mesh, stats_dict = out
+        #except TypeError:
+        #    mesh, stats_dict = out, {}
+        #time_dict.update(stats_dict)
+
+        # Write output
+        #mesh_out_file = os.path.join(mesh_dir, '%s.off' % (modelname+ '_gt'))
+        #mesh.export(mesh_out_file)
+        #out_file_dict['mesh_gt'] = mesh_out_file
 
 
     if cfg['generation']['copy_input']:

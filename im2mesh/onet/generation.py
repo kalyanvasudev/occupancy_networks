@@ -8,6 +8,8 @@ from im2mesh.utils import libmcubes
 from im2mesh.common import make_3d_grid
 from im2mesh.utils.libsimplify import simplify_mesh
 from im2mesh.utils.libmise import MISE
+from im2mesh.utils.libmesh import check_mesh_contains
+from im2mesh.common import compute_iou
 from torch.nn import functional as F
 import time
 
@@ -81,7 +83,7 @@ class Generator3D(object):
 
         kwargs = {}
         z = self.model.infer_z(data['points'].to(device),data['points.occ'].to(device), c, **kwargs)
-        z = z_gt.loc.detach()
+        z = z.loc.detach()
         
         mesh = self.generate_from_latent(z, c, stats_dict=stats_dict, **kwargs)
 
@@ -107,6 +109,14 @@ class Generator3D(object):
         z = torch.empty(z_gt.shape)
         torch.nn.init.uniform_(z,-0.1,0.1)
         z= z.float().to(device).requires_grad_(True)
+
+
+        kwargs = {}
+        stats_dict = {}
+        mesh = self.generate_from_latent(z, c, stats_dict=stats_dict, **kwargs)
+        occ = check_mesh_contains(mesh, data['points.all_points'].squeeze(0).numpy())
+        iou = compute_iou(occ, data['points.all_occ'].squeeze(0).numpy())
+        print((f"####### IOU before optimization: {iou} ##########"))
         
         # sample completely random
         #z = torch.rand(z_gt.shape).float().to(device).requires_grad_(True)
@@ -120,7 +130,7 @@ class Generator3D(object):
             points = all_points[:, idx,:].to(device)
             occ = all_occ[:, idx].to(device)
             
-            kwargs = {}
+            
             logits = self.model.decode(points, z, c, **kwargs).logits
             loss_i = F.binary_cross_entropy_with_logits(
                 logits, occ, reduction='none')
@@ -128,10 +138,17 @@ class Generator3D(object):
             if not i %200 or i ==0: 
                 print("Opt Iter: {:4d}, Loss: {:0.3f}, Z Dist: {:0.3f}, Z_gt Norm: {:0.3f}, Z_cur Norm: {:0.3f}".format( 
                     i, loss.tolist(), torch.norm(z_gt-z).tolist(), torch.norm(z_gt).tolist(), torch.norm(z).tolist()))
-                #print('opt iter:', i, "Loss:", loss.tolist(), "Z dist: ", torch.norm(z_gt-z).tolist(), \
-                #'Z_gt norm:', torch.norm(z_gt).tolist(), 'Z_cur norm:', torch.norm(z).tolist())
             loss.backward()
             optimizer.step()
+
+            ############# For debug only
+            #logits = self.model.decode(points, z_gt, c, **kwargs).logits
+            #loss_i = F.binary_cross_entropy_with_logits(
+            #    logits, occ, reduction='none')
+            #loss = loss_i.sum(-1).mean() #+ z.abs().mean()
+            #if not i %200 or i ==0: 
+            #    print("Loss from Z_git: {:0.3f}".format(loss.tolist()))
+            ############# End of debug only
 
         return z.detach(), loss.tolist()
 
@@ -183,6 +200,9 @@ class Generator3D(object):
                 loss = temp_loss
 
         mesh = self.generate_from_latent(z, c, stats_dict=stats_dict, **kwargs)
+        occ = check_mesh_contains(mesh, data['points.all_points'].squeeze(0).numpy())
+        iou = compute_iou(occ, data['points.all_occ'].squeeze(0).numpy())
+        print((f"####### IOU after optimization: {iou} ##########"))
         if return_stats:
             return mesh, stats_dict
         else:

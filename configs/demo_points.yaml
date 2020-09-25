@@ -6,7 +6,7 @@ inherit_from: configs/unconditional/onet_airplanes_pretrained.yaml
 training:
   out_dir:  demo_points
 generation:
-  vis_n_outputs: 5
+  vis_n_outputs: 10
   generation_dir: generation
   refinement_step: 0
   simplify_nfaces: 5000
