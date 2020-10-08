@@ -15,12 +15,12 @@ dependencies:
   - pyembree=0.1.4
   - pytest=4.0.2
   - python=3.6.7
-  - pytorch=1.0.0
+  - pytorch=1.6.0
   - pyyaml=3.13
   - scikit-image=0.14.1
   - scipy=1.1.0
   - tensorboardx=1.4
-  - torchvision=0.2.1
+  - torchvision
   - tqdm=4.28.1
   - trimesh=2.37.7
   - pip:

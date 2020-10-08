@@ -93,7 +93,7 @@ dmc_cuda_module = CUDAExtension(
 
 # Gather all extension modules
 ext_modules = [
-    pykdtree,
+    #pykdtree,
     mcubes_module,
     triangle_hash_module,
     mise_module,
