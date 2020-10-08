@@ -1,8 +1,8 @@
 method: onet
 data:
+  classes: ['02691156']
+  input_type: null
   path: data/ShapeNet
-  img_folder: img_choy2016
-  img_size: 224 
   points_subsample: 2048 
 model:
   encoder_latent: null
@@ -28,4 +28,6 @@ generation:
   n_z: 1
   resolution_0: 32 
   upsampling_steps: 2
-
+  use_sampling: false
+  copy_groundtruth: false
+  copy_input: false

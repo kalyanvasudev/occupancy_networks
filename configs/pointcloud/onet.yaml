@@ -1,9 +1,8 @@
 method: onet
 data:
-  input_type: pointcloud
+  classes: ['02691156']
+  input_type: null
   path: data/ShapeNet
-  pointcloud_n: 300
-  pointcloud_noise: 0.005
   points_subsample: 2048 
 model:
   encoder_latent: null
@@ -27,3 +26,8 @@ generation:
   refine: false
   n_x: 128
   n_z: 1
+  resolution_0: 32 
+  upsampling_steps: 2
+  use_sampling: false
+  copy_groundtruth: false
+  copy_input: false

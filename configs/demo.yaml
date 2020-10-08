@@ -6,5 +6,5 @@ training:
   out_dir:  demo
 generation:
   generation_dir: generation
-  refinement_step: 30
+  refinement_step: 0
   simplify_nfaces: 5000
