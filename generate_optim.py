@@ -1,8 +1,11 @@
 import torch
 # import torch.distributions as dist
 import os
+import pyglet
+import numpy as np
 import shutil
 import argparse
+import trimesh
 from tqdm import tqdm
 import time
 from collections import defaultdict
@@ -13,6 +16,20 @@ from im2mesh.utils.io import export_pointcloud
 from im2mesh.utils.visualize import visualize_data
 from im2mesh.utils.voxels import VoxelGrid
 
+
+def mesh_to_img(path,mesh):
+    scene = mesh.scene()
+    img_pat = path + '/render.png'
+    
+    cam_old, _ = scene.graph[scene.camera.name]
+    rotate = trimesh.transformations.rotation_matrix(
+    	angle= np.radians(-45.0), direction=[1,0,0], point=scene.centroid)
+    cam_new = np.dot(rotate, cam_old)
+    scene.graph[scene.camera.name] = cam_new
+    png = scene.save_image(resolution=[1920,1080], visible=True)
+    with open(img_pat, 'wb') as f:
+        f.write(png)
+        f.close()
 
 parser = argparse.ArgumentParser(
     description='Extract meshes from occupancy process.'
@@ -25,7 +42,16 @@ cfg = config.load_config(args.config, 'configs/default.yaml')
 is_cuda = (torch.cuda.is_available() and not args.no_cuda)
 device = torch.device("cuda" if is_cuda else "cpu")
 
+
+
+opt_batch_size = cfg['generation']['opt_batch_size']
+model_type = cfg['generation']['model_type']
+opt_iters = cfg['generation']['opt_iters']
+rnd_restart_num= cfg['generation']['rnd_restart_num']
+sampling_type = cfg['generation']['sampling_type']
+
 out_dir = cfg['training']['out_dir']
+out_dir += '_sample_{}_restarts_{}_optiters_{}_optbatchsize_{}'.format(sampling_type,rnd_restart_num,opt_iters,opt_batch_size)
 generation_dir = os.path.join(out_dir, cfg['generation']['generation_dir'])
 out_time_file = os.path.join(generation_dir, 'time_generation_full.pkl')
 out_time_file_class = os.path.join(generation_dir, 'time_generation.pkl')
@@ -145,9 +171,19 @@ for it, data in enumerate(test_loader):
 
     if generate_mesh:
         t0 = time.time()
-        
-        
-        out = generator.generate_mesh_from_points_optimize(data)
+
+        if model_type == 'single':
+            out = generator.generate_mesh_from_points_optimize(data,
+                                        opt_batch_size=opt_batch_size,
+                                        opt_iters=opt_iters,
+                                        rnd_restart_num=rnd_restart_num,
+                                        z_type=sampling_type)
+        else:
+            out = generator.generate_mesh_from_points_optimize_c(data,
+                                        opt_batch_size=opt_batch_size,
+                                        opt_iters=opt_iters,
+                                        rnd_restart_num=rnd_restart_num,
+                                        c_type=sampling_type)
         time_dict['mesh'] = time.time() - t0
 
         # Get statistics
@@ -157,11 +193,14 @@ for it, data in enumerate(test_loader):
             mesh, stats_dict = out, {}
         time_dict.update(stats_dict)
 
+        
         # Write output
         mesh_out_file = os.path.join(mesh_dir, '%s.off' % modelname)
         mesh.export(mesh_out_file)
         out_file_dict['mesh'] = mesh_out_file
 
+        #temp_m = trimesh.load_mesh(mesh_out_file)
+        #mesh_to_img(mesh_dir,mesh)
         ###### Add ground truth mesh from latent
         #out_gt = generator.generate_mesh_from_points(data)
 

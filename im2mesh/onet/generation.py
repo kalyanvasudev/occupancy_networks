@@ -102,13 +102,19 @@ class Generator3D(object):
         # optimize for z
 
         # sample from a N(0,1)
-        #z = self.model.get_z_from_prior((1,), sample=self.sample).to(device)
-        #z = z.float().to(device).requires_grad_(True)
+
+        if z_type == 'prior':
+            z = self.model.get_z_from_prior((1,), sample=self.sample).to(device)
+            z = z.float().to(device).requires_grad_(True)
+        elif z_type == 'uniform':
+            z = torch.empty(z_gt.shape)
+            torch.nn.init.uniform_(z,-0.1,0.1)
+            z= z.float().to(device).requires_grad_(True)
+        elif z_type == 'random':
+            z = torch.rand(1,128).float().to(device).requires_grad_(True)   
+        elif z_type == 'zeros':
+            z = torch.zeros(1,128).float().to(device).requires_grad_(True)   
         
-        # sample from uniform in a range
-        z = torch.empty(z_gt.shape)
-        torch.nn.init.uniform_(z,-0.1,0.1)
-        z= z.float().to(device).requires_grad_(True)
 
 
         kwargs = {}
@@ -135,7 +141,7 @@ class Generator3D(object):
             loss_i = F.binary_cross_entropy_with_logits(
                 logits, occ, reduction='none')
             loss = loss_i.sum(-1).mean() #+ z.abs().mean()
-            if not i %200 or i ==0: 
+            if not i %2000 or i ==0: 
                 print("Opt Iter: {:4d}, Loss: {:0.3f}, Z Dist: {:0.3f}, Z_gt Norm: {:0.3f}, Z_cur Norm: {:0.3f}".format( 
                     i, loss.tolist(), torch.norm(z_gt-z).tolist(), torch.norm(z_gt).tolist(), torch.norm(z).tolist()))
             loss.backward()
@@ -202,7 +208,100 @@ class Generator3D(object):
         mesh = self.generate_from_latent(z, c, stats_dict=stats_dict, **kwargs)
         occ = check_mesh_contains(mesh, data['points.all_points'].squeeze(0).numpy())
         iou = compute_iou(occ, data['points.all_occ'].squeeze(0).numpy())
-        print((f"####### IOU after optimization: {iou} ##########"))
+
+        #occ = self.model.decoder( data['points.all_points'].to(device), z, c, **kwargs)
+        #iou_new = compute_iou(occ.squeeze(0).cpu().detach().numpy(), data['points.all_occ'].squeeze(0).numpy())
+        print((f"####### IOU after optimization: {iou} ##########",loss))
+        if return_stats:
+            return mesh, stats_dict
+        else:
+            return mesh
+
+    def optimize_c(self, data, opt_batch_size=2048,
+                                        opt_iters=10000,
+                                        c_type='random'): 
+        device = self.device
+        all_points = data['points.all_points'] 
+        all_occ = data['points.all_occ']
+        
+        z = torch.empty(1, 0).to(device)
+        
+        # sample completely random
+        if c_type == 'random':
+            c = torch.rand(1,256).float().to(device).requires_grad_(True)   
+        elif c_type == 'uniform':
+            # sample from uniform in a range
+            c = torch.empty(1,256)
+            torch.nn.init.uniform_(c,-0.5,0.5)
+            c= c.float().to(device).requires_grad_(True)
+        elif c_type == 'zeros':
+            c = torch.zeros(1,256).float().to(device).requires_grad_(True)   
+
+        kwargs = {}
+        stats_dict = {}
+        #mesh = self.generate_from_latent(z, c, stats_dict=stats_dict, **kwargs)
+        #occ = check_mesh_contains(mesh, data['points.all_points'].squeeze(0).numpy())
+        #iou = compute_iou(occ, data['points.all_occ'].squeeze(0).numpy())
+        #print((f"####### IOU before optimization: {iou} ##########"))
+        
+
+        optimizer = torch.optim.Adam([c], lr=0.1 )#,weight_decay=0.0001)
+        #optimizer = torch.optim.SGD([c], lr=0.0001, momentum=0.9 )#,weight_decay=0.0001)
+
+        for i in range(opt_iters):
+            optimizer.zero_grad()
+            z = torch.empty(1, 0).to(device)
+            idx = np.random.randint(all_points.shape[1], size= opt_batch_size)
+            points = all_points[:, idx,:].to(device)
+            occ = all_occ[:, idx].to(device)
+            
+            
+            logits = self.model.decode(points, z, c, **kwargs).logits
+            loss_i = F.binary_cross_entropy_with_logits(
+                logits, occ, reduction='none')
+            loss = loss_i.sum(-1).mean() #+ z.abs().mean()
+            if not i %2000 or i ==0: 
+                print("Opt Iter: {:4d}, Loss: {:0.3f}".format( i, loss.tolist() ), torch.norm(c))
+            loss.backward()
+            optimizer.step()
+
+        return c.detach(), loss.tolist()
+    
+    def generate_mesh_from_points_optimize_c(self, data, 
+                                        return_stats=True, 
+                                        opt_batch_size=2008,
+                                        opt_iters=20000,
+                                        rnd_restart_num=1,
+                                        c_type='random'): # avail options 'random' and 'dist'
+        ''' Only batch size 1 supported!!!.
+
+        Args:
+            data (tensor): data tensor
+            return_stats (bool): whether stats should be returned
+        '''
+        self.model.eval()
+        device = self.device
+        stats_dict = {}
+        kwargs = {}
+    
+        c, loss = None, np.float('inf')
+
+        for i in range(rnd_restart_num):
+            print(f"####### Rand restart number: {i}/{rnd_restart_num} ##########")
+            temp_c, temp_loss = self.optimize_c(data, opt_batch_size,opt_iters, c_type)
+            if temp_loss < loss:
+                c = temp_c
+                loss = temp_loss
+
+        #z = self.model.get_z_from_prior((1,), sample=self.sample).to(device)
+        z = torch.empty(1, 0).to(device)
+        mesh = self.generate_from_latent(z, c, stats_dict=stats_dict, **kwargs)
+        occ = check_mesh_contains(mesh, data['points.all_points'].squeeze(0).numpy())
+        iou = compute_iou(occ, data['points.all_occ'].squeeze(0).numpy())
+
+        #occ = self.model.decoder( data['points.all_points'].to(device), z, c, **kwargs)
+        #iou = compute_iou(occ.squeeze(0).cpu().detach().numpy(), data['points.all_occ'].squeeze(0).numpy())
+        print((f"####### IOU after optimization: {iou} ##########", loss))
         if return_stats:
             return mesh, stats_dict
         else:
@@ -269,8 +368,7 @@ class Generator3D(object):
             mesh_extractor = MISE(
                 self.resolution0, self.upsampling_steps, threshold)
 
-            points = mesh_extractor.query()
-
+            points = mesh_extractor.query()        
             while points.shape[0] != 0:
                 # Query points
                 pointsf = torch.FloatTensor(points).to(self.device)
