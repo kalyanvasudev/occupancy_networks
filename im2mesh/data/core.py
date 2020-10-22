@@ -3,7 +3,7 @@ import logging
 from torch.utils import data
 import numpy as np
 import yaml
-
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +90,8 @@ class Shapes3dDataset(data.Dataset):
                 {'category': c, 'model': m}
                 for m in models_c
             ]
+        random.seed(1)
+        random.shuffle(self.models)
 
     def __len__(self):
         ''' Returns the length of the dataset.

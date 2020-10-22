@@ -5,16 +5,16 @@ inherit_from: configs/img/onet_pretrained.yaml
 #  mesh_gt_root: /private/home/kalyanv/learning_vision3d/datasets/ShapeNetCore.v1
 
 training:
-  out_dir:  results_multi/demo
+  out_dir:  results_multi_seeded/demo
 generation:
   opt_batch_size: 2008
   model_type: 'multi'
 
-  opt_iters: 4000
-  rnd_restart_num: 5
-  sampling_type: 'random'  
+  opt_iters: 20000
+  rnd_restart_num: 1
+  sampling_type: 'zeros'  
 
-  vis_n_outputs: 4
+  vis_n_outputs: 6
   generation_dir: generation
   refinement_step: 0
   simplify_nfaces: 5000

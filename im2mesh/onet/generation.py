@@ -12,6 +12,15 @@ from im2mesh.utils.libmesh import check_mesh_contains
 from im2mesh.common import compute_iou
 from torch.nn import functional as F
 import time
+from .volumetric_render import render_path,network_query_fn_onet,render_masks
+from random import Random
+from pytorch3d.renderer import look_at_view_transform
+from pytorch3d.io import load_objs_as_meshes, load_obj
+from pytorch3d.structures import Meshes
+from pytorch3d.renderer.mesh import TexturesAtlas, Textures
+import os
+import imageio
+rand = Random()
 
 
 class Generator3D(object):
@@ -53,6 +62,64 @@ class Generator3D(object):
         self.simplify_nfaces = simplify_nfaces
         self.preprocessor = preprocessor
 
+
+    def render_masks_depth(self, z,c, chunk=500, hwf=[256,256,5.0], 
+        savedir='/private/home/kalyanv/occupancy_networks/results_single',
+        render_factor=0 ):
+        mesh_path_gt = '/private/home/kalyanv/occupancy_networks/results_single/demo_sample_prior_restarts_1_optiters_2000_optbatchsize_2000/generation/vis/02691156_airplane/00_gt.obj'
+        mesh_path_off = '/private/home/kalyanv/occupancy_networks/results_single/demo_sample_prior_restarts_1_optiters_2000_optbatchsize_2000/generation/vis/02691156_airplane/00_mesh.off'
+
+        tri_mesh = trimesh.load(mesh_path_off)
+        verts = torch.from_numpy(tri_mesh.vertices).float().to(self.device)
+        faces = torch.from_numpy(tri_mesh.faces).float().to(self.device)
+        
+        tex = torch.ones_like(verts) 
+        tex[:, 1:] *= 0.0  # red
+        tex = tex.reshape(1, -1, 3)
+        textures = Textures(verts_rgb=tex)
+        mesh_off = Meshes(verts=[verts], faces=[faces], textures=textures)
+
+        mesh = load_objs_as_meshes([mesh_path_gt], device=self.device, load_textures=False)
+
+        b_box = mesh.get_bounding_boxes()
+        b_box = torch.abs(b_box[0])
+        b_box = b_box.max(dim=1)[0]
+        min_dist =1# torch.norm(b_box).cpu().numpy().tolist()
+
+        
+
+        elev_angle = 90.0# *rand.random()
+        azim_angle = 0.0#-180 + 360 * rand.random()
+        dist = 1# min_dist + 0.5 * rand.random()
+
+        R, T = look_at_view_transform(dist, elev_angle, azim_angle)
+        #R = torch.tensor([[-1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,-1.0]])#.to(self.device)
+        #R = R.reshape(1,3,3)#.to(self.device)
+        #T = torch.zeros(1,3)
+        #T[0,2] = 1.0
+        
+        mask_gt = render_masks(mesh, R, T, self.device)
+        mask_off = render_masks(mesh_off, R, T, self.device)
+        imageio.imwrite(os.path.join(savedir,'out_img_mask_gt_0.jpg'), mask_gt[0,:,:].cpu().detach().numpy())
+        imageio.imwrite(os.path.join(savedir,'out_img_mask_off_0.jpg'), mask_off[0,:,:].cpu().detach().numpy())
+
+        print("jfldsjfsdkjflsdjflsjdlfjsdlfjsldkjflskd", mask_gt.shape)
+        render_kwargs = {
+        'network_query_fn' : network_query_fn_onet,
+        'N_samples' : 100,
+        'decoder' : self.model.decoder,
+        'z_latent':z,
+        'c_latent': c,
+        }
+        #mat = torch.cat((R,T.reshape(1,3,1)), -1)[0]
+        mat = torch.cat((R,torch.zeros(1,3,1)), -1)[0]
+        #mat[:3,:3] = torch.eye(3)
+        #mat[:3,3]  = -1*mat[:3,3]
+        #mat[:3,:3] = torch.eye(3).to(self.device)
+        #mat[ 2,-1] = -0.1
+        with torch.no_grad():
+            return render_path([mat], hwf, chunk, render_kwargs, savedir, render_factor)
+            #return render_path([torch.cat((R,T.reshape(1,3,1)), -1)[0]], hwf, chunk, render_kwargs, savedir, render_factor)
 
     def generate_mesh_from_points(self, data, return_stats=True):
         ''' Generates the output from points and occupancies.
@@ -122,6 +189,7 @@ class Generator3D(object):
         mesh = self.generate_from_latent(z, c, stats_dict=stats_dict, **kwargs)
         occ = check_mesh_contains(mesh, data['points.all_points'].squeeze(0).numpy())
         iou = compute_iou(occ, data['points.all_occ'].squeeze(0).numpy())
+        print("49320985402398509238450982304982309840238945023985982305983208509384", torch.max(data['points.all_points']),torch.min(data['points.all_points']) )
         print((f"####### IOU before optimization: {iou} ##########"))
         
         # sample completely random
@@ -135,7 +203,6 @@ class Generator3D(object):
             idx = np.random.randint(all_points.shape[1], size= opt_batch_size)
             points = all_points[:, idx,:].to(device)
             occ = all_occ[:, idx].to(device)
-            
             
             logits = self.model.decode(points, z, c, **kwargs).logits
             loss_i = F.binary_cross_entropy_with_logits(
@@ -208,7 +275,7 @@ class Generator3D(object):
         mesh = self.generate_from_latent(z, c, stats_dict=stats_dict, **kwargs)
         occ = check_mesh_contains(mesh, data['points.all_points'].squeeze(0).numpy())
         iou = compute_iou(occ, data['points.all_occ'].squeeze(0).numpy())
-
+        self. render_masks_depth(z,c)
         #occ = self.model.decoder( data['points.all_points'].to(device), z, c, **kwargs)
         #iou_new = compute_iou(occ.squeeze(0).cpu().detach().numpy(), data['points.all_occ'].squeeze(0).numpy())
         print((f"####### IOU after optimization: {iou} ##########",loss))
@@ -245,7 +312,7 @@ class Generator3D(object):
         #print((f"####### IOU before optimization: {iou} ##########"))
         
 
-        optimizer = torch.optim.Adam([c], lr=0.1 )#,weight_decay=0.0001)
+        optimizer = torch.optim.Adam([c], lr=0.04 )#,weight_decay=0.0001)
         #optimizer = torch.optim.SGD([c], lr=0.0001, momentum=0.9 )#,weight_decay=0.0001)
 
         for i in range(opt_iters):

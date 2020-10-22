@@ -35,9 +35,20 @@ parser = argparse.ArgumentParser(
     description='Extract meshes from occupancy process.'
 )
 parser.add_argument('config', type=str, help='Path to config file.')
+parser.add_argument('sampling_type', type=str, help='Path to config file.')
+parser.add_argument('model_type', type=str, help='Path to config file.')
+parser.add_argument('opt_iters', type=int, help='Path to config file.')
+parser.add_argument('rnd_restart_num', type=int, help='Path to config file.')
+
 parser.add_argument('--no-cuda', action='store_true', help='Do not use cuda.')
 
+
+
 args = parser.parse_args()
+
+print("Input argumentss : ", args.config, args.sampling_type, args.model_type, args.opt_iters, args.rnd_restart_num)
+
+
 cfg = config.load_config(args.config, 'configs/default.yaml')
 is_cuda = (torch.cuda.is_available() and not args.no_cuda)
 device = torch.device("cuda" if is_cuda else "cpu")
@@ -45,10 +56,16 @@ device = torch.device("cuda" if is_cuda else "cpu")
 
 
 opt_batch_size = cfg['generation']['opt_batch_size']
-model_type = cfg['generation']['model_type']
-opt_iters = cfg['generation']['opt_iters']
-rnd_restart_num= cfg['generation']['rnd_restart_num']
-sampling_type = cfg['generation']['sampling_type']
+
+model_type = args.model_type
+opt_iters = args.opt_iters
+rnd_restart_num = args.rnd_restart_num
+sampling_type = args.sampling_type
+
+#model_type = cfg['generation']['model_type']
+#opt_iters = cfg['generation']['opt_iters']
+#rnd_restart_num= cfg['generation']['rnd_restart_num']
+#sampling_type = cfg['generation']['sampling_type']
 
 out_dir = cfg['training']['out_dir']
 out_dir += '_sample_{}_restarts_{}_optiters_{}_optbatchsize_{}'.format(sampling_type,rnd_restart_num,opt_iters,opt_batch_size)

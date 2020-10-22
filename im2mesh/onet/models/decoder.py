@@ -51,7 +51,7 @@ class Decoder(nn.Module):
 
     def forward(self, p, z, c=None, **kwargs):
         batch_size, T, D = p.size()
-
+        
         net = self.fc_p(p)
 
         if self.z_dim != 0:
@@ -61,7 +61,7 @@ class Decoder(nn.Module):
         if self.c_dim != 0:
             net_c = self.fc_c(c).unsqueeze(1)
             net = net + net_c
-
+        #print("fjlsdjflsdjflsjdfljsdflkjsldfj880923-092-498-23894-2834-823-84-8", z.shape, c.shape, p.shape, net.shape,net_z.shape)
         net = self.block0(net)
         net = self.block1(net)
         net = self.block2(net)

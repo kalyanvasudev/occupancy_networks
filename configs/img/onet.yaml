@@ -1,6 +1,6 @@
 method: onet
 data:
-  classes: ['02691156']
+  classes: ['02691156', '02828884', '02933112']
   input_type: null
   path: data/ShapeNet
   points_subsample: 2048 
