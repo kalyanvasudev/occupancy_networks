@@ -280,7 +280,8 @@ def render_path(render_poses, hwf, chunk, render_kwargs, savedir=None, render_fa
         t = time.time()
         all_ret = render(H, W, focal, chunk=chunk, c2w=c2w[:3, :4], **render_kwargs)
         depth_img = all_ret["depth_map"]
-        occ_img = all_ret["acc_map"]
+        #occ_img = all_ret["sharp_acc_map"]
+        occ_img = all_ret["sharp_acc_map"]
         occs.append(occ_img.cpu().detach().numpy())
         depths.append(depth_img.cpu().detach().numpy())
 

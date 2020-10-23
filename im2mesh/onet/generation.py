@@ -14,7 +14,7 @@ from torch.nn import functional as F
 import time
 from .volumetric_render import render_path,network_query_fn_onet,render_masks
 from random import Random
-from pytorch3d.renderer import look_at_view_transform
+from pytorch3d.renderer import look_at_view_transform, camera_position_from_spherical_angles
 from pytorch3d.io import load_objs_as_meshes, load_obj
 from pytorch3d.structures import Meshes
 from pytorch3d.renderer.mesh import TexturesAtlas, Textures
@@ -63,7 +63,7 @@ class Generator3D(object):
         self.preprocessor = preprocessor
 
 
-    def render_masks_depth(self, z,c, chunk=500, hwf=[256,256,5.0], 
+    def render_masks_depth(self, z,c, chunk=500, hwf=[256,256,300.0], 
         savedir='/private/home/kalyanv/occupancy_networks/results_single',
         render_factor=0 ):
         mesh_path_gt = '/private/home/kalyanv/occupancy_networks/results_single/demo_sample_prior_restarts_1_optiters_2000_optbatchsize_2000/generation/vis/02691156_airplane/00_gt.obj'
@@ -88,16 +88,13 @@ class Generator3D(object):
 
         
 
-        elev_angle = 90.0# *rand.random()
-        azim_angle = 0.0#-180 + 360 * rand.random()
-        dist = 1# min_dist + 0.5 * rand.random()
+        elev_angle = 45.0# *rand.random()
+        azim_angle = 45.0#-180 + 360 * rand.random()
+        dist = 1.5# min_dist + 0.5 * rand.random()
 
         R, T = look_at_view_transform(dist, elev_angle, azim_angle)
-        #R = torch.tensor([[-1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,-1.0]])#.to(self.device)
-        #R = R.reshape(1,3,3)#.to(self.device)
-        #T = torch.zeros(1,3)
-        #T[0,2] = 1.0
-        
+        T_rays = camera_position_from_spherical_angles(dist, elev_angle, azim_angle)
+
         mask_gt = render_masks(mesh, R, T, self.device)
         mask_off = render_masks(mesh_off, R, T, self.device)
         imageio.imwrite(os.path.join(savedir,'out_img_mask_gt_0.jpg'), mask_gt[0,:,:].cpu().detach().numpy())
@@ -106,20 +103,14 @@ class Generator3D(object):
         print("jfldsjfsdkjflsdjflsjdlfjsdlfjsldkjflskd", mask_gt.shape)
         render_kwargs = {
         'network_query_fn' : network_query_fn_onet,
-        'N_samples' : 100,
+        'N_samples' : 1000,
         'decoder' : self.model.decoder,
         'z_latent':z,
         'c_latent': c,
         }
-        #mat = torch.cat((R,T.reshape(1,3,1)), -1)[0]
-        mat = torch.cat((R,torch.zeros(1,3,1)), -1)[0]
-        #mat[:3,:3] = torch.eye(3)
-        #mat[:3,3]  = -1*mat[:3,3]
-        #mat[:3,:3] = torch.eye(3).to(self.device)
-        #mat[ 2,-1] = -0.1
         with torch.no_grad():
-            return render_path([mat], hwf, chunk, render_kwargs, savedir, render_factor)
-            #return render_path([torch.cat((R,T.reshape(1,3,1)), -1)[0]], hwf, chunk, render_kwargs, savedir, render_factor)
+            #return render_path([mat], hwf, chunk, render_kwargs, savedir, render_factor)
+            return render_path([torch.cat((R,T_rays.reshape(1,3,1)), -1)[0]], hwf, chunk, render_kwargs, savedir, render_factor)
 
     def generate_mesh_from_points(self, data, return_stats=True):
         ''' Generates the output from points and occupancies.
