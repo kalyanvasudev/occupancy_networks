@@ -19,7 +19,7 @@ def get_rays(H, W, focal, c2w):
     i = i.t()
     j = j.t()
     dirs = torch.stack(
-        [-(i - W * 0.5) / focal, (j - H * 0.5) / focal, torch.ones_like(i)], -1
+        [-(i - W * 0.5) / focal, -(j - H * 0.5) / focal, torch.ones_like(i)], -1
     )
     # Rotate ray directions from camera frame to the world frame
     rays_d = torch.sum(
@@ -188,11 +188,11 @@ def network_query_fn_onet(inputs, z, c, decoder, decoder_kwargs={}, netchunk=200
     inputs_indicator = torch.prod(inputs_flags, -1).to(device)
 
     z_inp = torch.cat(inputs.shape[0] * [z])
-    # return torch.sigmoid(decoder(inputs.to(device),z.to(device),c.to(device)))
-    # return torch.sigmoid(decoder(inputs.to(device),z_inp.to(device),c.to(device)).logits)
-    return inputs_indicator * torch.sigmoid(
-        decoder(inputs.to(device), z_inp.to(device), c.to(device))
-    )
+    
+    #return                                  decoder(inputs.to(device), z_inp.to(device), c.to(device))
+    return inputs_indicator *               decoder(inputs.to(device), z_inp.to(device), c.to(device))
+    #return  torch.sigmoid(decoder(inputs.to(device), z_inp.to(device), c.to(device)))
+    #return inputs_indicator * torch.sigmoid(decoder(inputs.to(device), z_inp.to(device), c.to(device)))
     # return torch.cat([decoder(inputs[i:i+netchunk],z[i:i+netchunk],c[i:i+netchunk])
     #            for i in range(0, inputs.shape[0], netchunk)], 0)
 
@@ -273,6 +273,7 @@ def render_path(render_poses, hwf, chunk, render_kwargs, savedir=None, render_fa
 
     occs = []
     depths = []
+    sharp_occs = []
 
     t = time.time()
     for i, c2w in enumerate(tqdm(render_poses)):
@@ -280,9 +281,14 @@ def render_path(render_poses, hwf, chunk, render_kwargs, savedir=None, render_fa
         t = time.time()
         all_ret = render(H, W, focal, chunk=chunk, c2w=c2w[:3, :4], **render_kwargs)
         depth_img = all_ret["depth_map"]
-        #occ_img = all_ret["sharp_acc_map"]
-        occ_img = all_ret["sharp_acc_map"]
+        sharp_occ_img = all_ret["sharp_acc_map"]
+        occ_img = all_ret["acc_map"]
+        #print("fjldsjflsdjflksjd", torch.max(occ_img), torch.min(occ_img))
+        #occ_img[occ_img>0.05] = 1
+        #occ_img.to(dtype=torch.float32)
+        
         occs.append(occ_img.cpu().detach().numpy())
+        sharp_occs.append(sharp_occ_img.cpu().detach().numpy())
         depths.append(depth_img.cpu().detach().numpy())
 
         if i == 0:
@@ -297,6 +303,10 @@ def render_path(render_poses, hwf, chunk, render_kwargs, savedir=None, render_fa
             occ = occs[-1]
             filename = os.path.join(savedir, "{:03d}_occ.png".format(i))
             imageio.imwrite(filename, occ)
+
+            sharp_occ = sharp_occs[-1]
+            filename = os.path.join(savedir, "{:03d}_sharp_occ.png".format(i))
+            imageio.imwrite(filename, sharp_occ)
 
     depths = np.stack(depths, 0)
     occs = np.stack(occs, 0)
@@ -320,6 +330,8 @@ from pytorch3d.structures import Meshes
 from pytorch3d.renderer import (
     look_at_view_transform,
     OpenGLPerspectiveCameras,
+    PerspectiveCameras,
+    OrthographicCameras,
     PointLights,
     DirectionalLights,
     Materials,
@@ -340,14 +352,18 @@ from pytorch3d.renderer.mesh.shader import (
 
 
 def render_masks(mesh, rots, trans, device):
-
-    cameras = OpenGLPerspectiveCameras(device=device, R=rots, T=trans)
+    fx_screen = 300.0 
+    image_width = 256
+    # follow formula here - 
+    # https://github.com/facebookresearch/pytorch3d/blob/c25fd836942c42101c7519c5124ebbb74d450bf8/docs/notes/cameras.md
+    cameras = PerspectiveCameras(device=device, R=rots, T=trans,focal_length=fx_screen * 2.0 / image_width)
+    #cameras = OpenGLPerspectiveCameras(device=device, R=rots, T=trans)
 
     blend_params = BlendParams(sigma=1e-4, gamma=1e-4)
     raster_settings = RasterizationSettings(
         image_size=256,
-        blur_radius=np.log(1.0 / 1e-4 - 1.0) * blend_params.sigma,
-        faces_per_pixel=10,
+        blur_radius=0.0, #np.log(1.0 / 1e-4 - 1.0) * blend_params.sigma,
+        faces_per_pixel=1,
         bin_size=0,
     )
     renderer_mask = MeshRenderer(

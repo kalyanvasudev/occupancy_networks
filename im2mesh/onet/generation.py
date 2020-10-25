@@ -88,8 +88,8 @@ class Generator3D(object):
 
         
 
-        elev_angle = 45.0# *rand.random()
-        azim_angle = 45.0#-180 + 360 * rand.random()
+        elev_angle = 0.0# *rand.random()
+        azim_angle = 0.0#-180 + 360 * rand.random()
         dist = 1.5# min_dist + 0.5 * rand.random()
 
         R, T = look_at_view_transform(dist, elev_angle, azim_angle)
