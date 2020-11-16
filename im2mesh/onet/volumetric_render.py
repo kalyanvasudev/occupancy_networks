@@ -108,7 +108,7 @@ def raw2outputs(raw, z_vals, rays_d, raw_noise_std=0, white_bkgd=False, has_rgb=
     acc_map = torch.sum(weights, -1)
     # print(acc_map)
     ret["acc_map"] = acc_map
-    ret["sharp_acc_map"] = (torch.sum(raw > 0.5, -1) > 0.0).to(torch.float32).to(device)
+    ret["sharp_acc_map"] = (torch.sum(raw > 0.2*100.0, -1) > 0.0).to(torch.float32).to(device)
 
     if has_rgb:
         rgb_map = torch.sum(weights[..., None] * rgb, -2)  # [N_rays, 3]
@@ -190,9 +190,9 @@ def network_query_fn_onet(inputs, z, c, decoder, decoder_kwargs={}, netchunk=200
     z_inp = torch.cat(inputs.shape[0] * [z])
     
     #return                                  decoder(inputs.to(device), z_inp.to(device), c.to(device))
-    return inputs_indicator *               decoder(inputs.to(device), z_inp.to(device), c.to(device))
+    #return inputs_indicator *               decoder(inputs.to(device), z_inp.to(device), c.to(device))
     #return  torch.sigmoid(decoder(inputs.to(device), z_inp.to(device), c.to(device)))
-    #return inputs_indicator * torch.sigmoid(decoder(inputs.to(device), z_inp.to(device), c.to(device)))
+    return 100.0*inputs_indicator * torch.sigmoid(decoder(inputs.to(device), z_inp.to(device), c.to(device)))
     # return torch.cat([decoder(inputs[i:i+netchunk],z[i:i+netchunk],c[i:i+netchunk])
     #            for i in range(0, inputs.shape[0], netchunk)], 0)
 

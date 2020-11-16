@@ -90,7 +90,7 @@ class Shapes3dDataset(data.Dataset):
                 {'category': c, 'model': m}
                 for m in models_c
             ]
-        random.seed(1)
+        random.seed(15)
         random.shuffle(self.models)
 
     def __len__(self):

@@ -88,8 +88,8 @@ class Generator3D(object):
 
         
 
-        elev_angle = 0.0# *rand.random()
-        azim_angle = 0.0#-180 + 360 * rand.random()
+        elev_angle = 90.0# *rand.random()
+        azim_angle = 45.0#-180 + 360 * rand.random()
         dist = 1.5# min_dist + 0.5 * rand.random()
 
         R, T = look_at_view_transform(dist, elev_angle, azim_angle)
@@ -103,7 +103,7 @@ class Generator3D(object):
         print("jfldsjfsdkjflsdjflsjdlfjsdlfjsldkjflskd", mask_gt.shape)
         render_kwargs = {
         'network_query_fn' : network_query_fn_onet,
-        'N_samples' : 1000,
+        'N_samples' : 64,
         'decoder' : self.model.decoder,
         'z_latent':z,
         'c_latent': c,
@@ -483,6 +483,7 @@ class Generator3D(object):
         n_x, n_y, n_z = occ_hat.shape
         box_size = 1 + self.padding
         threshold = np.log(self.threshold) - np.log(1. - self.threshold)
+        print("tresholdtresholdtresholdtresholdtresholdtresholdtresholdtresholdtresholdtresholdtresholdtresholdtreshold", threshold, self.threshold)
         # Make sure that mesh is watertight
         t0 = time.time()
         occ_hat_padded = np.pad(
@@ -526,10 +527,10 @@ class Generator3D(object):
             stats_dict['time (simplify)'] = time.time() - t0
 
         # Refine mesh
-        if self.refinement_step > 0:
-            t0 = time.time()
-            self.refine_mesh(mesh, occ_hat, z, c)
-            stats_dict['time (refine)'] = time.time() - t0
+        #if self.refinement_step > 0:
+        #    t0 = time.time()
+        #    self.refine_mesh(mesh, occ_hat, z, c)
+        #    stats_dict['time (refine)'] = time.time() - t0
 
         return mesh
 
